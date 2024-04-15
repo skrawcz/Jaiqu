@@ -50,28 +50,28 @@ Building AI agents? Check out [AgentOps](https://agentops.ai/?jaiqu)
 from jaiqu import validate_schema, translate_schema
 
 # Desired data format 
-schema = {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-        "id": {
-            "type": ["string", "null"],
-            "description": "A unique identifier for the record."
+    schema = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": ["string", "null"],
+                "description": "A unique identifier for the record."
+            },
+            "date": {
+                "type": "string",
+                "description": "A string describing the date."
+            },
+            "model": {
+                "type": "string",
+                "description": "A text field representing the model used."
+            }
         },
-        "date": {
-            "type": "string",
-            "description": "A string describing the date."
-        },
-        "model": {
-            "type": "string",
-            "description": "A text field representing the model used."
-        }
-    },
-    "required": [
-        "id",
-        "date"
-    ]
-}
+        "required": [
+            "id",
+            "date"
+        ]
+    }
 
 # Provided data
 input_json = {

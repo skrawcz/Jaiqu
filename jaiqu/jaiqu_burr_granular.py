@@ -1,3 +1,4 @@
+import os
 import burr.core
 from burr.core import ApplicationBuilder, State, default, when
 from burr.core.action import action
@@ -12,6 +13,10 @@ from helpers import identify_key, create_jq_string, repair_query, dict_to_jq_fil
     writes=["valid_schema", "schema_properties", "schema_processed"]
 )
 def validate_schema(state: State) -> tuple[dict, State]:
+    """Action to validate a schema.
+
+    This function is called recursively
+    """
     output_schema = state["output_schema"]
     input_json = state["input_json"]
     key_hints = state["key_hints"]
@@ -74,14 +79,14 @@ def create_jq_filter_query(state: State) -> tuple[dict, State]:
             value = v
             break
     if key is None:
-        state = state.update(filter_query=filter_query, filters_created=True)
+        state = state.update(filter_query=filter_query, filters_created=True, max_retries_hit=False)
         return {"jq_string": None}, state
 
     jq_string = create_jq_string(input_json, key, value)
 
     if jq_string == "None":  # If the response is empty, skip the key
         filter_query[key] = None
-        state = state.update(filter_query=filter_query, filters_created=False)
+        state = state.update(filter_query=filter_query, filters_created=False, max_retries_hit=False)
         return {"jq_string": None}, state
 
     tries = 0
@@ -115,6 +120,11 @@ def finalize_filter(state: State) -> tuple[dict, State]:
     writes=["max_retries_hit", "complete_filter"]
 )
 def validate_json(state: State) -> tuple[dict, State]:
+    """Action to validate and repair the JSON filter.
+
+    This will try to compile the filter against the input json.
+    If it fails it will try to repair things until max retries is hit.
+    """
     output_schema = state["output_schema"]
     complete_filter = state["jq_filter"]
     input_json = state["input_json"]
@@ -140,6 +150,24 @@ def validate_json(state: State) -> tuple[dict, State]:
 
 def translate_schema(input_json, output_schema, openai_api_key: str | None = None, key_hints=None,
                      max_retries=10) -> str:
+    """
+    Translate the input JSON schema into a filtering query using jq.
+
+    Args:
+        input_json (dict): The input JSON to be reformatted.
+        output_schema (dict): The desired output schema using standard schema formatting.
+        openai_api_key (str, optional): OpenAI API key. Defaults to None.
+        key_hints (None, optional): Hints for translating keys. Defaults to None.
+        max_retries (int, optional): Maximum number of retries for creating a valid jq filter. Defaults to 10.
+
+    Returns:
+        str: The filtering query in jq syntax.
+
+    Raises:
+        RuntimeError: If the input JSON does not contain the required data to satisfy the output schema.
+        RuntimeError: If failed to create a valid jq filter after maximum retries.
+        RuntimeError: If failed to validate the jq filter after maximum retries.
+    """
     app = build_application(input_json, output_schema, openai_api_key, key_hints, max_retries)
     last_action, result, state = app.run(halt_after=["error_state", "good_result"])
     if last_action == "error_state":
@@ -148,7 +176,10 @@ def translate_schema(input_json, output_schema, openai_api_key: str | None = Non
 
 
 def build_application(input_json="", output_schema="", openai_api_key: str | None = None, key_hints=None,
-                      max_retries=10):
+                      max_retries=10, visualize: bool = False):
+    """Builds the Jaiqu application."""
+    if openai_api_key is not None:
+        os.environ["OPENAI_API_KEY"] = openai_api_key
     app = (
         ApplicationBuilder()
         .with_state(
@@ -184,16 +215,18 @@ def build_application(input_json="", output_schema="", openai_api_key: str | Non
         .with_identifiers(partition_key="dagworks")
         .build()
     )
-    app.visualize(
-        output_file_path="jaiqu_granular", include_conditions=True, view=True, format="png"
-    )
+    if visualize:
+        app.visualize(
+            output_file_path="jaiqu", include_conditions=True, view=False, format="png"
+        )
     return app
 
 
 if __name__ == '__main__':
+    """Quick example to test things."""
     # app = build_application()
     # app.visualize(
-    #     output_file_path="jaiqu_granular", include_conditions=True, view=True, format="png"
+    #     output_file_path="jaiqu", include_conditions=True, view=True, format="png"
     # )
     schema = {
         "$schema": "http://json-schema.org/draft-07/schema#",
